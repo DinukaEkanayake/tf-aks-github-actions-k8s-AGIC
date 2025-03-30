@@ -7,6 +7,10 @@ on:
     branches: [ "master" ]
   workflow_dispatch:
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   infrastructure:
     runs-on: ubuntu-latest  # Runner for infrastructure job
