@@ -21,7 +21,9 @@ jobs:
       id: login
       uses: azure/login@v1.4.7
       with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        client-id: ${{ secrets.CLIENTID }}
+        tenant-id: ${{ secrets.TENANTID }}
+        subscription-id: ${{ secrets.SUBSCRIPTIONID }}
 
     - name: Initialize Terraform
       run: terraform init
@@ -54,7 +56,9 @@ jobs:
       id: login
       uses: azure/login@v1.4.7
       with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        client-id: ${{ secrets.CLIENTID }}
+        tenant-id: ${{ secrets.TENANTID }}
+        subscription-id: ${{ secrets.SUBSCRIPTIONID }}
 
     - name: Build & Push Docker Image
       run: |
