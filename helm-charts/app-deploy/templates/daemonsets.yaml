@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: myapp
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: myapp
+  template:
+    metadata:
+      labels:
+        app: myapp
+    spec:
+      containers:
+      - name: myapp-image
+        image: "imgmyappacrregistry.azurecr.io/myrepository/springbootapp:latest"
+        ports:
+        - containerPort: 80

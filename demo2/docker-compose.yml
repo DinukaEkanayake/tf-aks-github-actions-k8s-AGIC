@@ -1,0 +1,30 @@
+version: "3.7"
+services:
+  api_service:
+    build: .
+    restart: always
+    ports:
+      - "80:8080"
+    networks:
+      - springapimysql-net
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysqldb:3306/springbootdb?allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: Dinuka1999
+    depends_on:
+      - mysqldb
+    volumes:
+      - .m2:/root/.m2
+
+  mysqldb:
+    image: mysql:latest
+    ports:
+      - "3306:3306"
+    networks:
+      - springapimysql-net
+    environment:
+      MYSQL_DATABASE: springbootdb
+      MYSQL_ROOT_PASSWORD: Dinuka1999
+
+networks:
+  springapimysql-net:

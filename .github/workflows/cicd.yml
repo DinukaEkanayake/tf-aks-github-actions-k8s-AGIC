@@ -1,0 +1,127 @@
+name: CICD pipeline
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+jobs:
+  infrastructure:
+    runs-on: ubuntu-latest  # Runner for infrastructure job
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v4.2.2
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+
+    - name: Log in to Azure
+      id: login
+      uses: azure/login@v1.4.7
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Initialize Terraform
+      run: terraform init
+      working-directory: infra  # Adjust if your Terraform files are in another directory
+
+    - name: Apply Terraform Configuration
+      run: terraform apply -auto-approve
+      working-directory: infra
+
+    - name: Save Terraform Outputs
+      run: |
+        echo "RESOURCE_GROUP=$(terraform output -raw resource_group)" >> $GITHUB_ENV
+        echo "CLUSTER_NAME=$(terraform output -raw cluster_name)" >> $GITHUB_ENV
+      working-directory: infra
+
+    - name: Upload Terraform Outputs
+      uses: actions/upload-artifact@v4
+      with:
+        name: terraform-outputs
+        path: $GITHUB_ENV
+
+  build:
+    runs-on: ubuntu-latest
+    needs: infrastructure  # Ensure infra is created before building
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v4.2.2
+
+    - name: Log in to Azure
+      id: login
+      uses: azure/login@v1.4.7
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Build & Push Docker Image
+      run: |
+        az acr login --name imgmyappacrregistry
+        docker build -t imgmyappacrregistry.azurecr.io/myrepository/springbootapp:latest demo2/
+        docker push imgmyappacrregistry.azurecr.io/myrepository/springbootapp:latest
+
+    - name: Store Image Details
+      run: echo "IMAGE_TAG=imgtestacrregistry.azurecr.io/myrepository/myapp:latest" >> $GITHUB_ENV
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: docker-image
+        path: $GITHUB_ENV
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [infrastructure, build]  # Ensure both infra and build are done before deploying
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v4.2.2
+
+    - name: Download Terraform Outputs
+      uses: actions/download-artifact@v4
+      with:
+        name: terraform-outputs
+
+    - name: Load Terraform Outputs
+      run: source terraform-outputs
+
+    - name: Download Build Artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: docker-image
+
+    - name: Load Image Details
+      run: source docker-image
+
+    - name: Set AKS context
+      id: set-context
+      uses: azure/aks-set-context@v3
+      with:
+        resource-group: $RESOURCE_GROUP
+        cluster-name: $CLUSTER_NAME
+
+    - name: Setup kubectl
+      id: install-kubectl
+      uses: azure/setup-kubectl@v3
+
+    # - name: Delete Old Kubernetes Manifests
+    #   continue-on-error: true
+    #   run: |
+    #     kubectl delete -f k8s/manifests --ignore-not-found=true
+
+    - name: Install Helm
+      uses: azure/setup-helm@v3
+    
+    - name: Install/Upgrade aks-secret-provider Helm Chart
+      run: |
+        helm upgrade --install aks-secret-provider helm-charts/aks-secret-provider
+
+    - name: Install/Upgrade app-deploy Helm Chart
+      run: |
+        helm upgrade --install app-deploy helm-charts/app-deploy
+
+    - name: Check Deployment Status
+      run: |
+        kubectl get pods -n myapp -o wide
+        kubectl get svc -n myapp -o wide

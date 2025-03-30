@@ -1,0 +1,171 @@
+resource "azurerm_virtual_network" "vnet" {
+  name                = var.vnet_name
+  location = var.resource_group_location
+  resource_group_name = var.resource_group_name
+  address_space       = ["10.224.0.0/12"]
+}
+
+resource "azurerm_subnet" "aks_subnet" {
+  name                 = var.aks_subnet_name
+  resource_group_name =  var.resource_group_name
+  virtual_network_name = azurerm_virtual_network.vnet.name
+  address_prefixes     = ["10.224.0.0/18"]
+}
+
+resource "azurerm_subnet" "appgw_subnet" {
+  name                 = var.appgw_subnet_name
+  resource_group_name  = var.resource_group_name
+  virtual_network_name = azurerm_virtual_network.vnet.name
+  address_prefixes     = ["10.224.64.0/18"]
+}
+
+# resource "azurerm_resource_group" "db-rg" {
+#   name     = "mysqldb-vnet"
+#   location = "eastus"
+# }
+
+resource "azurerm_virtual_network" "db-vnet" {
+  name                = "mysqldb-vnet"
+  location = "centralus"
+  resource_group_name = var.resource_group_name
+  address_space       = ["10.0.0.0/16"]
+}
+
+resource "azurerm_subnet" "mysqldb_subnet" {
+  name                 = var.mysqldb_subnet_name
+  resource_group_name  = var.resource_group_name
+  virtual_network_name = azurerm_virtual_network.db-vnet.name
+  address_prefixes     = ["10.0.0.0/24"]
+  service_endpoints    = ["Microsoft.Storage"]
+  delegation {
+    name = "fs"
+    service_delegation {
+      name = "Microsoft.DBforMySQL/flexibleServers"
+      actions = [
+        "Microsoft.Network/virtualNetworks/subnets/join/action",
+      ]
+    }
+  }
+}
+
+resource "azurerm_virtual_network_peering" "westus2_to_eastus" {
+  name                      = "peering-westus2-eastus"
+  resource_group_name       = var.resource_group_name
+  virtual_network_name      = azurerm_virtual_network.vnet.name
+  remote_virtual_network_id = azurerm_virtual_network.db-vnet.id
+  allow_virtual_network_access = true
+}
+
+resource "azurerm_virtual_network_peering" "eastus_to_westus2" {
+  name                      = "peering-eastus-westus2"
+  resource_group_name       = var.resource_group_name
+  virtual_network_name      = azurerm_virtual_network.db-vnet.name
+  remote_virtual_network_id = azurerm_virtual_network.vnet.id
+  allow_virtual_network_access = true
+}
+
+
+
+# Create NSG for AKS Subnet
+# resource "azurerm_network_security_group" "aks_nsg" {
+#   name                = "aks-subnet-nsg"
+#   location            = var.resource_group_location
+#   resource_group_name = var.resource_group_name
+
+# #   # Allow inbound traffic from AppGW Subnet
+#   security_rule {
+#     name                       = "Allow-AppGW-to-AKS"
+#     priority                   = 1001
+#     direction                  = "Inbound"
+#     access                     = "Allow"
+#     protocol                   = "*" 
+#     source_address_prefix      = azurerm_subnet.appgw_subnet.address_prefixes[0]
+#     source_port_range           = "*" 
+#     destination_address_prefix  = azurerm_subnet.aks_subnet.address_prefixes[0]
+#     destination_port_range     = "*" 
+#   }
+
+# #   security_rule {
+# #     name                        = "AllowAKStoAppGw"
+# #     priority                    = 1002
+# #     direction                   = "Outbound"
+# #     access                      = "Allow"
+# #     protocol                    = "Tcp"
+# #     source_address_prefix       = azurerm_subnet.aks_subnet.address_prefixes[0]
+# #     source_port_range           = "*"
+# #     destination_address_prefix  = azurerm_subnet.appgw_subnet.address_prefixes[0]
+# #     destination_port_ranges     = ["65200-65535"]
+# #   }
+
+
+# #   # Allow Kubernetes API Server (Required for AKS)
+# #   security_rule {
+# #     name                       = "Allow-Kube-API"
+# #     priority                   = 1003
+# #     direction                  = "Inbound"
+# #     access                     = "Allow"
+# #     protocol                   = "Tcp"
+# #     source_port_range          = "*"
+# #     destination_port_range     = "443"
+# #     source_address_prefix      = "*"
+# #     destination_address_prefix = "*"
+# #   }
+
+# #   # Allow SSH from trusted IPs
+# #   security_rule {
+# #     name                        = "AllowSSH"
+# #     priority                    = 1004
+# #     direction                   = "Inbound"
+# #     access                      = "Allow"
+# #     protocol                    = "Tcp"
+# #     source_port_range           = "*"
+# #     destination_port_range      = "22"
+# #     source_address_prefix       = "10.0.0.0/16"  # Replace with your IP
+# #     destination_address_prefix  = "*"
+# #   }
+# }
+
+# # Associate NSG with AKS Subnet
+# resource "azurerm_subnet_network_security_group_association" "aks_nsg_assoc" {
+#   subnet_id                 = azurerm_subnet.aks_subnet.id
+#   network_security_group_id = azurerm_network_security_group.aks_nsg.id
+# }
+
+# # Create NSG for AppGW Subnet
+# resource "azurerm_network_security_group" "appgw_nsg" {
+#   name                = "appgw-subnet-nsg"
+#   location            = var.resource_group_location
+#   resource_group_name = var.resource_group_name
+
+#   security_rule {
+#      name                        = "AllowGatewayManagerInbound"
+#      description                 = "Allow Azure application GatewayManager on management ports"
+#      priority                    = 2510
+#      direction                   = "Inbound"
+#      access                      = "Allow"
+#      protocol                    = "Tcp"
+#      source_port_range           = "*"
+#      source_address_prefix       = "GatewayManager"
+#      destination_port_range      = "65200-65535"
+#      destination_address_prefix  = "*"
+#    }
+
+#   # Allow outbound traffic to AKS Subnet
+#   security_rule {
+#     name                       = "Allow-AppGW-Outbound-to-AKS"
+#     priority                   = 1005
+#     direction                  = "Outbound"
+#     access                     = "Allow"
+#     protocol                   = "*"
+#     source_port_range          = "*"
+#     destination_port_range     = "*"
+#     source_address_prefix      = "*"
+#     destination_address_prefix = azurerm_subnet.aks_subnet.address_prefixes[0]
+#   }
+# }
+
+# # Associate NSG with AppGW Subnet
+# resource "azurerm_subnet_network_security_group_association" "appgw_nsg_assoc" {
+#   subnet_id                 = azurerm_subnet.appgw_subnet.id
+#   network_security_group_id = azurerm_network_security_group.appgw_nsg.id
+# }

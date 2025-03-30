@@ -1,0 +1,12 @@
+secretProviderClass:
+  name: azure-kvname-user-msi
+
+azure:
+  keyVaultName: "myapp-aks-keyvault"
+  managedIdentityClientId: "a6efd1ac-6d5a-44f8-bad5-d6ce4ad3a472"
+  tenantId: "aa232db2-7a78-4414-a529-33db9124cba7"
+
+# secret:
+#   objectName: "db-username"
+
+# enableSecretRotation: true
